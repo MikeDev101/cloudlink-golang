@@ -1,9 +1,10 @@
 package cloudlink
 
 type PacketUPL1 struct {
-	Cmd string      `json:"cmd"`
-	Val interface{} `json:"val"`
-	ID  string      `json:"id"`
+	Cmd  string      `json:"cmd"`
+	Val  interface{} `json:"val"`
+	ID   string      `json:"id"`
+	Name string      `json:"name"`
 }
 
 type PacketUPL2 struct {

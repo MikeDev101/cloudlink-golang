@@ -1,4 +1,4 @@
-package cloudlink
+package main
 
 type PacketUPL1 struct {
 	Cmd  string      `json:"cmd"`

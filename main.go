@@ -4,7 +4,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"os"
 
 	// "reflect"
 	"sync"
@@ -18,12 +17,9 @@ import (
 // Version - Used to identify specific versions of the CloudLink Golang server.
 var Version string = "0.1.0"
 
-// DefaultSchema is the pre-defined formatting for incoming CloudLink messages.
-type DefaultSchema struct {
-	Cmd string
-	Val any
-	Id  any
-}
+// Configuration
+var MessageOfTheDay = "Cloudlink Golang Edition! This works somehow!"
+var CheckIPAddresses bool = true
 
 // WebsocketUpgrader is used to upgrade HTTP(s) requests into websocket connections.
 var WebsocketUpgrader = websocket.Upgrader{
@@ -61,8 +57,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 	// Generate Snowflake ID
 	node, err := snowflake.NewNode(1)
 	if err != nil {
-		log.Println(err)
-		os.Exit(3)
+		log.Fatalln(err, 3)
 	}
 
 	return &Client{
@@ -132,8 +127,8 @@ func (mgr *Manager) Server(w http.ResponseWriter, r *http.Request) {
 	client.MessageHandler(mgr)
 }
 
-// UnicastMessage will send a message to a single client.
-func UnicastMessage(client Client, message DefaultSchema) {
+// UnicastPacket will send a message to a single client.
+func UnicastPacket(client Client, message PacketUPL2) {
 
 	// Marshal the JSON message
 	data, err := json.Marshal(message)
@@ -150,10 +145,10 @@ func UnicastMessage(client Client, message DefaultSchema) {
 }
 
 // MulticastMessage will send a message to multiple clients.
-func MulticastMessage(clients ClientList, message DefaultSchema) {
+func MulticastMessage(clients ClientList, message PacketUPL2) {
 	for _, c := range clients {
 		// log.Printf("%v (%v)", c.id, c.uuid)
-		UnicastMessage(c, message)
+		UnicastPacket(c, message)
 	}
 }
 
@@ -161,9 +156,7 @@ func MulticastMessage(clients ClientList, message DefaultSchema) {
 func (c *Client) MessageHandler(mgr *Manager) {
 
 	// Gracefully close the connection once function is complete
-	defer func() {
-		c.manager.RemoveClient(c)
-	}()
+	defer c.manager.RemoveClient(c)
 
 	// Connection loop
 	for {
@@ -176,8 +169,8 @@ func (c *Client) MessageHandler(mgr *Manager) {
 		}
 
 		// Parse JSON
-		var InputMessage DefaultSchema
-		parse_err := json.Unmarshal([]byte(messagePayload), &InputMessage)
+		var packet PacketUPL2
+		parse_err := json.Unmarshal([]byte(messagePayload), &packet)
 
 		// Handle JSON Parsing errors
 		if parse_err != nil {
@@ -190,11 +183,17 @@ func (c *Client) MessageHandler(mgr *Manager) {
 
 		// TODO: Message command processing code
 
-		var ReturnMessage DefaultSchema
-		ReturnMessage.Cmd = "direct"
-		ReturnMessage.Val = "I:100 | OK"
+		switch packet.Cmd {
+		case "handshake":
 
-		MulticastMessage(mgr.clients, ReturnMessage)
+		default:
+		}
+
+		ServerResponse := PacketUPL2{
+			Cmd: "direct",
+			Val: "I:100 | OK",
+		}
+		MulticastMessage(mgr.clients, ServerResponse)
 	}
 }
 
@@ -208,7 +207,7 @@ func initServer() {
 }
 
 /*
-serveWS starts the CloudLink server in secure (wss://) mode.
+serveWSS starts the CloudLink server in secure (wss://) mode.
 You must have a certificate file (cert, or cert.pem) and
 a private key (key, or key.pem) file present and trusted
 by your client(s) before running.

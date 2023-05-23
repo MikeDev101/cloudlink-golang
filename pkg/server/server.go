@@ -1,12 +1,11 @@
-package server
+package main
 
 // Import dependencies.
 import (
-	"github.com/mikedev101/cloudlink-golang/pkg/schemas"
-
 	"log"
 	"net/http"
-	"os"
+
+	// "reflect"
 	"sync"
 
 	"github.com/bwmarrin/snowflake"
@@ -17,6 +16,10 @@ import (
 
 // Version - Used to identify specific versions of the CloudLink Golang server.
 var Version string = "0.1.0"
+
+// Configuration
+var MessageOfTheDay = "Cloudlink Golang Edition! This works somehow!"
+var CheckIPAddresses bool = true
 
 // WebsocketUpgrader is used to upgrade HTTP(s) requests into websocket connections.
 var WebsocketUpgrader = websocket.Upgrader{
@@ -54,8 +57,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 	// Generate Snowflake ID
 	node, err := snowflake.NewNode(1)
 	if err != nil {
-		log.Println(err)
-		os.Exit(3)
+		log.Fatalln(err, 3)
 	}
 
 	return &Client{
@@ -125,8 +127,8 @@ func (mgr *Manager) Server(w http.ResponseWriter, r *http.Request) {
 	client.MessageHandler(mgr)
 }
 
-// UnicastMessage will send a message to a single client.
-func UnicastMessage(client Client, message schemas.CloudlinkRootSchema) {
+// UnicastPacket will send a message to a single client.
+func UnicastPacket(client Client, message PacketUPL2) {
 
 	// Marshal the JSON message
 	data, err := json.Marshal(message)
@@ -143,10 +145,10 @@ func UnicastMessage(client Client, message schemas.CloudlinkRootSchema) {
 }
 
 // MulticastMessage will send a message to multiple clients.
-func MulticastMessage(clients ClientList, message schemas.CloudlinkRootSchema) {
+func MulticastMessage(clients ClientList, message PacketUPL2) {
 	for _, c := range clients {
 		// log.Printf("%v (%v)", c.id, c.uuid)
-		UnicastMessage(c, message)
+		UnicastPacket(c, message)
 	}
 }
 
@@ -154,9 +156,7 @@ func MulticastMessage(clients ClientList, message schemas.CloudlinkRootSchema) {
 func (c *Client) MessageHandler(mgr *Manager) {
 
 	// Gracefully close the connection once function is complete
-	defer func() {
-		c.manager.RemoveClient(c)
-	}()
+	defer c.manager.RemoveClient(c)
 
 	// Connection loop
 	for {
@@ -169,8 +169,8 @@ func (c *Client) MessageHandler(mgr *Manager) {
 		}
 
 		// Parse JSON
-		var InputMessage schemas.CloudlinkRootSchema
-		parse_err := json.Unmarshal([]byte(messagePayload), &InputMessage)
+		var packet PacketUPL2
+		parse_err := json.Unmarshal([]byte(messagePayload), &packet)
 
 		// Handle JSON Parsing errors
 		if parse_err != nil {
@@ -183,16 +183,24 @@ func (c *Client) MessageHandler(mgr *Manager) {
 
 		// TODO: Message command processing code
 
-		var ReturnMessage schemas.CloudlinkRootSchema
-		ReturnMessage.Cmd = "direct"
-		ReturnMessage.Val = "I:100 | OK"
+		switch packet.Cmd {
+		case "handshake":
+			HandleHandshake(mgr)
+		case "gmsg":
+			HandleGMSG(mgr, packet.Val)
+		default:
+			ServerResponse := PacketUPL2{
+				Cmd: "direct",
+				Val: "I:100 | OK",
+			}
+			MulticastMessage(mgr.clients, ServerResponse)
+		}
 
-		MulticastMessage(mgr.clients, ReturnMessage)
 	}
 }
 
-// Init initializes the CloudLink server.
-func Init() {
+// initServer initializes the CloudLink server.
+func initServer() {
 	// Create a new Manager instance to manage websocket instances
 	manager := NewManager()
 
@@ -200,30 +208,11 @@ func Init() {
 	http.HandleFunc("/", manager.Server)
 }
 
-/*
-ServeWSS starts the CloudLink server in secure (wss://) mode.
-You must have a certificate file (cert, or cert.pem) and
-a private key (key, or key.pem) file present and trusted
-by your client(s) before running.
+// main is the start of the server program.
+func main() {
+	// Configure the websocket server.
+	initServer()
 
-You must call initServer beforehand to use this function.
-*/
-func ServeWSS(host string, cert string, key string) {
-	// Display a startup version string.
-	log.Printf("CloudLink Server (Go Edition) v%v - Listening to wss://%v", Version, host)
-
-	// Begin running the websocket server with SSL support.
-	log.Fatal(http.ListenAndServeTLS(host, cert, key, nil))
-}
-
-/*
-ServeWS starts the CloudLink server in insecure (ws://) mode.
-You must call initServer beforehand to use this function.
-*/
-func ServeWS(host string) {
-	// Display a startup version string.
-	log.Printf("CloudLink Server (Go Edition) v%v - Listening to ws://%v", Version, host)
-
-	// Begin running the websocket server.
-	log.Fatal(http.ListenAndServe(host, nil))
+	// Run server
+	ServeWS("localhost:3000")
 }

@@ -185,15 +185,15 @@ func (c *Client) MessageHandler(mgr *Manager) {
 
 		switch packet.Cmd {
 		case "handshake":
-
+			HandleHandshake(mgr)
 		default:
+			ServerResponse := PacketUPL2{
+				Cmd: "direct",
+				Val: "I:100 | OK",
+			}
+			MulticastMessage(mgr.clients, ServerResponse)
 		}
 
-		ServerResponse := PacketUPL2{
-			Cmd: "direct",
-			Val: "I:100 | OK",
-		}
-		MulticastMessage(mgr.clients, ServerResponse)
 	}
 }
 
@@ -206,39 +206,11 @@ func initServer() {
 	http.HandleFunc("/", manager.Server)
 }
 
-/*
-serveWSS starts the CloudLink server in secure (wss://) mode.
-You must have a certificate file (cert, or cert.pem) and
-a private key (key, or key.pem) file present and trusted
-by your client(s) before running.
-
-You must call initServer beforehand to use this function.
-*/
-func serveWSS(host string, cert string, key string) {
-	// Display a startup version string.
-	log.Printf("CloudLink Server (Go Edition) v%v - Listening to wss://%v", Version, host)
-
-	// Begin running the websocket server with SSL support.
-	log.Fatal(http.ListenAndServeTLS(host, cert, key, nil))
-}
-
-/*
-serveWS starts the CloudLink server in insecure (ws://) mode.
-You must call initServer beforehand to use this function.
-*/
-func serveWS(host string) {
-	// Display a startup version string.
-	log.Printf("CloudLink Server (Go Edition) v%v - Listening to ws://%v", Version, host)
-
-	// Begin running the websocket server.
-	log.Fatal(http.ListenAndServe(host, nil))
-}
-
 // main is the start of the server program.
 func main() {
 	// Configure the websocket server.
 	initServer()
 
 	// Run server
-	serveWS("localhost:3000")
+	ServeWS("localhost:3000")
 }

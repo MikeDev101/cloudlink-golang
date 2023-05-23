@@ -1,5 +1,7 @@
 package main
 
+// TODO: Implement using a server struct instead of relying on local variables
+
 type Server struct {
 	// Other
 	EnableLogs  bool

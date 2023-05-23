@@ -23,7 +23,7 @@ func HandleHandshake(manager *Manager) {
 
 	ServerResponse = PacketUPL2{
 		Cmd: "gmsg",
-		Val: "Not Implemented!",
+		Val: GetGMSG(),
 	}
 	MulticastMessage(manager.clients, ServerResponse)
 
@@ -32,4 +32,8 @@ func HandleHandshake(manager *Manager) {
 		Val: "I:100 | OK",
 	}
 	MulticastMessage(manager.clients, ServerResponse)
+}
+
+func HandleGMSG(manager *Manager, msg interface{}) {
+	MulticastMessage(manager.clients, AddGMSG(msg))
 }

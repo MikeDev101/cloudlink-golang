@@ -186,6 +186,8 @@ func (c *Client) MessageHandler(mgr *Manager) {
 		switch packet.Cmd {
 		case "handshake":
 			HandleHandshake(mgr)
+		case "gmsg":
+			HandleGMSG(mgr, packet.Val)
 		default:
 			ServerResponse := PacketUPL2{
 				Cmd: "direct",

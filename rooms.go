@@ -1,5 +1,8 @@
 package main
 
+// broken, dont use for now
+/* package main
+
 var rooms = []string{}
 
 func CreateRoom(room string) {
@@ -19,3 +22,4 @@ func RoomExists(room string) bool {
 		return false
 	}
 }
+*/

@@ -1,4 +1,4 @@
-module github.com/mikedev101/cloudlink-golang
+module cloudlink-golang
 
 go 1.20
 

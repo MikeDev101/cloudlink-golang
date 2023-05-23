@@ -1,6 +1,6 @@
 package main
 
-func HandleHandshake(manager Manager) {
+func HandleHandshake(manager *Manager) {
 
 	ServerResponse := PacketUPL2{
 		Cmd: "client_ip",
@@ -31,5 +31,5 @@ func HandleHandshake(manager Manager) {
 		Cmd: "direct",
 		Val: "I:100 | OK",
 	}
-	MulticastMessage(mgr.clients, ServerResponse)
+	MulticastMessage(manager.clients, ServerResponse)
 }

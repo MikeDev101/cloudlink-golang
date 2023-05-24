@@ -27,13 +27,28 @@ func HandleHandshake(manager *Manager) {
 	}
 	MulticastMessage(manager.clients, ServerResponse)
 
+	ServerResponse = GetULIST()
+	MulticastMessage(manager.clients, ServerResponse)
+
 	ServerResponse = PacketUPL2{
-		Cmd: "direct",
-		Val: "I:100 | OK",
+		Cmd:    "statuscode",
+		Code:   "I:100 | OK",
+		CodeID: 100,
 	}
 	MulticastMessage(manager.clients, ServerResponse)
 }
 
 func HandleGMSG(manager *Manager, msg interface{}) {
 	MulticastMessage(manager.clients, AddGMSG(msg))
+}
+func HandleGVAR(manager *Manager, name interface{}, value interface{}) {
+	MulticastMessage(manager.clients, AddGVAR(name, value))
+}
+func HandleSetID(manager *Manager, value interface{}) {
+	MulticastMessage(manager.clients, AddUser(value))
+	MulticastMessage(manager.clients, PacketUPL2{
+		Cmd:    "statuscode",
+		Code:   "I:100 | OK",
+		CodeID: 100,
+	})
 }

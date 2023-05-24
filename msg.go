@@ -19,8 +19,9 @@ func AddGMSG(msg interface{}) PacketUPL2 {
 		}
 	}
 	return PacketUPL2{
-		Cmd: "gmsg",
-		Val: gmsg,
+		Cmd:   "gmsg",
+		Val:   gmsg,
+		Rooms: "default",
 	}
 }
 func GetGMSG() PacketUPL2 {

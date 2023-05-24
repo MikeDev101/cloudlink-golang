@@ -188,6 +188,10 @@ func (c *Client) MessageHandler(mgr *Manager) {
 			HandleHandshake(mgr)
 		case "gmsg":
 			HandleGMSG(mgr, packet.Val)
+		case "gvar":
+			HandleGVAR(mgr, packet.Name, packet.Val)
+		case "setid":
+
 		default:
 			ServerResponse := PacketUPL2{
 				Cmd: "direct",

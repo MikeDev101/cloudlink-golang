@@ -40,12 +40,9 @@ type Client struct {
 	uuid       uuid.UUID
 }
 
-// ClientList is a map used to keep track of clients.
-type ClientList map[*Client]Client
-
 // Manager is used to store all values for each client.
 type Manager struct {
-	clients ClientList
+	clients map[*Client]Client
 
 	// Used to lock states before editing a client.
 	sync.RWMutex
@@ -71,7 +68,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 // NewManager is used to create a manager struct and initialize its values.
 func NewManager() *Manager {
 	return &Manager{
-		clients: make(ClientList),
+		clients: make(map[*Client]Client),
 	}
 }
 
@@ -145,7 +142,7 @@ func UnicastPacket(client Client, message PacketUPL2) {
 }
 
 // MulticastMessage will send a message to multiple clients.
-func MulticastMessage(clients ClientList, message PacketUPL2) {
+func MulticastMessage(clients map[*Client]Client, message PacketUPL2) {
 	for _, c := range clients {
 		// log.Printf("%v (%v)", c.id, c.uuid)
 		UnicastPacket(c, message)
@@ -188,6 +185,10 @@ func (c *Client) MessageHandler(mgr *Manager) {
 			HandleHandshake(mgr)
 		case "gmsg":
 			HandleGMSG(mgr, packet.Val)
+		case "gvar":
+			HandleGVAR(mgr, packet.Name, packet.Val)
+		case "setid":
+			HandleSetID(mgr, packet.Val, packet.Listener)
 		default:
 			ServerResponse := PacketUPL2{
 				Cmd: "direct",

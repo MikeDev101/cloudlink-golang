@@ -7,7 +7,7 @@ type UlistSub struct {
 	Val    interface{}
 }
 
-func AddUser(name interface{}) PacketUPL2 {
+func AddUser(name interface{}, listener interface{}) PacketUPL2 {
 	if !containsValue(ulist, name) {
 		temp, err := appendToSlice(ulist, name)
 		if err != nil {
@@ -17,18 +17,30 @@ func AddUser(name interface{}) PacketUPL2 {
 			}
 		} else {
 			ulist = temp
-			return GetULIST()
+			return GetULIST(listener)
 		}
 	}
-	return GetULIST()
+	return GetULIST(listener)
 }
-func GetULIST() PacketUPL2 {
-	return PacketUPL2{
-		Cmd: "ulist",
-		Val: UlistSub{
-			Method: "set",
-			Val:    ulist,
-		},
-		Rooms: "default",
+func GetULIST(listener interface{}) PacketUPL2 {
+	if listener == nil {
+		return PacketUPL2{
+			Cmd: "ulist",
+			Val: UlistSub{
+				Method: "set",
+				Val:    ulist,
+			},
+			Rooms: "default",
+		}
+	} else {
+		return PacketUPL2{
+			Cmd: "ulist",
+			Val: UlistSub{
+				Method: "set",
+				Val:    ulist,
+			},
+			Rooms:    "default",
+			Listener: listener,
+		}
 	}
 }

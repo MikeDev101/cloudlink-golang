@@ -2,6 +2,15 @@ package main
 
 import "errors"
 
+func containsValueClientlist(slice map[*Client]Client, value interface{}) bool {
+	for _, item := range slice {
+		if item == value {
+			return true
+		}
+	}
+	return false
+}
+
 func containsValue(slice []interface{}, value interface{}) bool {
 	for _, item := range slice {
 		if item == value {

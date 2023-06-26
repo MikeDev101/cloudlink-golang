@@ -15,6 +15,8 @@ type UserObject struct {
 
 // Generates a value for client identification.
 func (client *Client) GenerateUserObject() *UserObject {
+	client.RLock()
+	defer client.RUnlock()
 	if client.usernameset {
 		return &UserObject{
 			Id:       client.id,

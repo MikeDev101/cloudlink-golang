@@ -32,8 +32,6 @@ func (client *Client) GenerateUserObject() *UserObject {
 }
 
 func CL4ProtocolDetect(client *Client) {
-	client.RLock()
-	defer client.RUnlock()
 	if client.protocol == 0 {
 		// Update client attributes
 		client.Lock()

@@ -3,8 +3,6 @@ package cloudlink
 import "fmt"
 
 func ScratchProtocolDetect(client *Client) {
-	client.RLock()
-	defer client.RUnlock()
 	if client.protocol == 0 {
 		// Update client attributes
 		client.Lock()

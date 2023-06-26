@@ -3,6 +3,7 @@ package cloudlink
 import (
 	"log"
 
+	"github.com/bwmarrin/snowflake"
 	"github.com/goccy/go-json"
 	"github.com/gofiber/contrib/websocket"
 )
@@ -12,26 +13,21 @@ func JSONDump(message any) []byte {
 	return payload
 }
 
-// MulticastMessageRooms takes a Room struct and broadcasts a payload to all clients stored within the room's clients map.
-func MulticastMessageRooms(room *Room, message any) {
-	for _, client := range room.clients {
+// MulticastMessage broadcasts a payload to multiple clients.
+func MulticastMessage(clients map[snowflake.ID]*Client, message any) {
+	for _, client := range clients {
 		// Spawn goroutines to multicast the payload
-		go UnicastMessage(&client, message)
-	}
-}
-
-// MulticastMessageRooms takes a client manager and broadcasts a payload to all clients stored within the manager's clients map.
-func MulticastMessageManager(manager *Manager, message any) {
-	for _, client := range manager.clients {
-		// Spawn goroutines to multicast the payload
-		go UnicastMessage(&client, message)
+		go UnicastMessage(client, message)
 	}
 }
 
 // UnicastMessageAny broadcasts a payload to a singular client.
 func UnicastMessage(client *Client, message any) {
-	// Echo message back to client - Log errors if any
+	// Lock state for the websocket connection to prevent accidental concurrent writes to websocket
+	client.connectionMutex.Lock()
+	// Attempt to send message to client
 	if err := client.connection.WriteMessage(websocket.TextMessage, JSONDump(message)); err != nil {
 		log.Printf("Client %s (%s) TX error: %s", client.id, client.uuid, err)
 	}
+	client.connectionMutex.Unlock()
 }

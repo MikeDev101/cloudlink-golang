@@ -9,11 +9,20 @@ import (
 	"github.com/google/uuid"
 )
 
-var ServerVersion string = "0.1.0"
+var ServerVersion string = "0.1.0-golang"
 
 type Room struct {
 	// Subscribed clients to the room
-	clients map[uuid.UUID]Client
+	clients      map[snowflake.ID]*Client
+	clientsMutex sync.RWMutex
+
+	// Global message (GMSG) state
+	gmsgState      interface{}
+	gmsgStateMutex sync.RWMutex
+
+	// Globar variables (GVAR) states
+	gvarState      map[string]any
+	gvarStateMutex sync.RWMutex
 
 	// Friendly name for room
 	name string
@@ -27,20 +36,15 @@ type Manager struct {
 	name string
 
 	// Registered client sessions
-	clients map[snowflake.ID]Client
-
-	// Used to avoid race conditions when accessing the clients map
+	clients      map[snowflake.ID]*Client
 	clientsMutex sync.RWMutex
 
 	// Rooms storage
-	rooms map[string]*Room
-
-	// Used to avoid race conditions when accessing the rooms map
+	rooms      map[string]*Room
 	roomsMutex sync.RWMutex
 
 	// Configuration settings
 	Config struct {
-		EnableLogs       bool
 		RejectClients    bool
 		CheckIPAddresses bool
 		EnableMOTD       bool
@@ -57,27 +61,29 @@ type Manager struct {
 // NewClient assigns a UUID and Snowflake ID to a websocket client, and returns a initialized Client struct for use with a manager's AddClient.
 func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 	// Request and create a lock before generating ID values
-	manager.Lock()
+	manager.clientsMutex.Lock()
 
 	// Generate client ID values
 	client_id := manager.SnowflakeIDNode.Generate()
 	client_uuid := uuid.New()
 
 	// Release the lock
-	manager.Unlock()
+	manager.clientsMutex.Unlock()
 
 	return &Client{
 		connection: conn,
 		manager:    manager,
 		id:         client_id,
 		uuid:       client_uuid,
+		rooms:      make(map[string]*Room),
+		handshake:  false,
 	}
 }
 
 // Dummy Managers function identically to a normal manager. However, they are used for selecting specific clients to multicast to.
 func DummyManager() *Manager {
 	return &Manager{
-		clients: make(map[snowflake.ID]Client),
+		clients: make(map[snowflake.ID]*Client),
 		rooms:   make(map[string]*Room),
 	}
 }
@@ -88,87 +94,117 @@ func New(name string) *Manager {
 		log.Fatalln(err, 3)
 	}
 
-	return &Manager{
+	manager := &Manager{
 		name:            name,
-		clients:         make(map[snowflake.ID]Client),
+		clients:         make(map[snowflake.ID]*Client),
 		rooms:           make(map[string]*Room),
 		SnowflakeIDNode: node,
 	}
+
+	return manager
 }
 
-func (manager *Manager) CreateRoom(name string) {
-	// Request and create a lock before modifying values
-	manager.roomsMutex.Lock()
-
-	// Create room
-	manager.rooms[name] = new(Room)
-
-	// Prepare the room state
-	manager.rooms[name].name = name
-	manager.rooms[name].clients = make(map[uuid.UUID]Client)
-
-	// Release the lock
-	manager.roomsMutex.Unlock()
-}
-
-func (manager *Manager) DeleteRoom(name string) {
-	// Acquire read lock on the rooms map
+func (manager *Manager) CreateRoom(name string) *Room {
 	manager.roomsMutex.RLock()
 
 	// Access rooms map
-	_, ok := manager.rooms[name]
+	_, exists := manager.rooms[name]
 
-	// Free the read lock on the rooms map
 	manager.roomsMutex.RUnlock()
 
-	if ok {
-		// Request and create a lock before modifying values
+	if !exists {
 		manager.roomsMutex.Lock()
 
-		// Delete room
-		delete(manager.rooms, name)
+		log.Printf("[%s] Creating room %s", manager.name, name)
 
-		// Release the lock
+		// Create and prepare the room state
+		manager.rooms[name] = &Room{
+			name:      name,
+			clients:   make(map[snowflake.ID]*Client, 1),
+			gmsgState: "",
+			gvarState: make(map[string]any),
+		}
+
 		manager.roomsMutex.Unlock()
 	}
+
+	// Return the room even if it already exists
+	return manager.rooms[name]
 }
 
-func (manager *Manager) AddClient(c *Client) {
-	log.Printf("[%s] Client connected: %s (%s)", manager.name, c.id, c.uuid)
+func (room *Room) SubscribeClient(client *Client) {
+	room.clientsMutex.Lock()
 
-	// Lock access to the clients map
+	// Add client
+	room.clients[client.id] = client
+
+	room.clientsMutex.Unlock()
+	client.Lock()
+
+	// Add pointer to subscribed room in client's state
+	client.rooms[room.name] = room
+
+	client.Unlock()
+}
+
+func (room *Room) UnsubscribeClient(client *Client) {
+	room.clientsMutex.Lock()
+
+	// Remove client
+	delete(room.clients, client.id)
+
+	room.clientsMutex.Unlock()
+	client.Lock()
+
+	// Remove pointer to subscribed room from client's state
+	delete(client.rooms, room.name)
+
+	client.Unlock()
+}
+
+func (manager *Manager) DeleteRoom(name string) {
+	manager.roomsMutex.Lock()
+
+	log.Printf("[%s] Destroying room %s", manager.name, name)
+
+	// Delete room
+	delete(manager.rooms, name)
+
+	manager.roomsMutex.Unlock()
+}
+
+func (manager *Manager) AddClient(client *Client) {
 	manager.clientsMutex.Lock()
 
 	// Add client
-	manager.clients[c.id] = *c
+	manager.clients[client.id] = client
 
-	// Free the lock on the clients map
 	manager.clientsMutex.Unlock()
 }
 
-func (manager *Manager) RemoveClient(c *Client) {
-	// Acquire read lock on the clients map
-	manager.clientsMutex.RLock()
+func (manager *Manager) RemoveClient(client *Client) {
+	manager.clientsMutex.Lock()
 
-	// Access clients map
-	_, ok := manager.clients[c.id]
+	// Remove client from manager's clients map
+	delete(manager.clients, client.id)
 
-	// Free the read lock on the clients map
-	manager.clientsMutex.RUnlock()
+	// Unsubscribe from all rooms and free memory by clearing out empty rooms
+	for _, room := range TempCopyRooms(client.rooms) {
+		room.UnsubscribeClient(client)
 
-	if ok {
-		log.Printf("[%s] Client disconnected: %s (%s)", manager.name, c.id, c.uuid)
-
-		// Close the connection
-		c.connection.Close()
-
-		// Lock access to the clients map
-		manager.clientsMutex.Lock()
-
-		// Delete client session
-		delete(manager.clients, c.id)
-
-		// Free the lock on the clients map
-		manager.clientsMutex.Unlock()
+		// Destroy room if empty
+		if len(room.clients) == 0 {
+			manager.DeleteRoom(room.name)
+		}
 	}
+	manager.clientsMutex.Unlock()
+}
+
+// Creates a temporary deep copy of a client's rooms map attribute.
+func TempCopyRooms(origin map[string]*Room) map[string]*Room {
+	clone := make(map[string]*Room, len(origin))
+	for x, y := range origin {
+		clone[x] = y
+	}
+	return clone
 }

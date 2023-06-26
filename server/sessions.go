@@ -29,31 +29,47 @@ func (client *Client) MessageHandler(manager *Manager) {
 	for {
 		// Listen for new messages
 		if _, message, err = client.connection.ReadMessage(); err != nil {
-			log.Printf("[%s] Client %s (%s) RX error: %s", manager.name, client.id, client.uuid, err)
 			break
 		}
 
-		// Attempt to identify CL4 protocol
-		var cl4packet PacketUPL2
-		if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
-			client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
-		}
+		switch client.protocol {
+		case 0: // Detect protocol
+			// CL4 protocol
+			var cl4packet PacketUPL
+			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
+				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
+			}
 
-		// Attempt to identify Scratch protocol
-		var scratchpacket Scratch
-		if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
-			client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
-		}
+			// Scratch protocol
+			var scratchpacket Scratch
+			if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
+				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
+			}
 
-		// Spawn a new goroutine and handle requests
-		if cl4packet.Cmd != "" {
-			CL4MethodHandler(client, cl4packet)
+			// Handle requests
+			if cl4packet.Cmd != "" {
+				CL4ProtocolDetect(client)
+				CL4MethodHandler(client, &cl4packet)
+			} else if scratchpacket.Method != "" {
+				ScratchProtocolDetect(client)
+				ScratchMethodHandler(client, &scratchpacket)
+			} else {
+				client.CloseWithMessage(websocket.CloseProtocolError, "Couldn't identify protocol")
+			}
 
-		} else if scratchpacket.Method != "" {
-			ScratchMethodHandler(client, scratchpacket)
+		case 1: // CL4
+			var cl4packet PacketUPL
+			if err := json.Unmarshal([]byte(message), &cl4packet); err != nil {
+				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
+			}
+			CL4MethodHandler(client, &cl4packet)
 
-		} else {
-			client.CloseWithMessage(websocket.CloseProtocolError, "Couldn't identify protocol")
+		case 2: // Scratch
+			var scratchpacket Scratch
+			if err := json.Unmarshal([]byte(message), &scratchpacket); err != nil {
+				client.CloseWithMessage(websocket.CloseUnsupportedData, "JSON parsing error")
+			}
+			ScratchMethodHandler(client, &scratchpacket)
 		}
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"runtime/debug"
 	"time"
 
 	"github.com/gofiber/contrib/websocket"
@@ -12,6 +13,9 @@ import (
 )
 
 func main() {
+	// Configure runtime settings
+	debug.SetGCPercent(35) // 35% limit for GC
+
 	// Create fiber application
 	app := fiber.New()
 
@@ -42,11 +46,11 @@ func main() {
 	app.Get("/monitor", monitor.New(
 		monitor.Config{
 			Title:   "CloudLink Metrics",
-			Refresh: (250 * time.Millisecond),
+			Refresh: (50 * time.Millisecond),
 		},
 	))
 
-	log.Fatal(app.Listen("127.0.0.1:3000"))
+	log.Fatal(app.Listen(":3000"))
 	// Access the websocket server: ws://0.0.0.0:3000/
 
 	//log.Fatal(app.ListenTLS("0.0.0.0:3000", "./cert.pem", "./key.pem"))

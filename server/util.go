@@ -1,8 +1,12 @@
-package main
+package cloudlink
 
-import "errors"
+import (
+	// "errors"
+	"fmt"
+)
 
-func containsValueClientlist(slice map[*Client]Client, value interface{}) bool {
+/*
+func containsValueClientlist(slice map[snowflake.ID]*Client, value interface{}) bool {
 	for _, item := range slice {
 		if item == value {
 			return true
@@ -19,6 +23,35 @@ func containsValue(slice []interface{}, value interface{}) bool {
 	}
 	return false
 }
+*/
+
+// Generates a value for client identification.
+func (client *Client) GenerateUserObject() *UserObject {
+	client.RLock()
+	defer client.RUnlock()
+	if client.usernameset {
+		return &UserObject{
+			Id:       fmt.Sprint(client.id),
+			Username: client.username,
+			Uuid:     fmt.Sprint(client.uuid),
+		}
+	} else {
+		return &UserObject{
+			Id:   fmt.Sprint(client.id),
+			Uuid: fmt.Sprint(client.uuid),
+		}
+	}
+}
+
+// Creates a temporary deep copy of a client's rooms map attribute.
+func TempCopyRooms(origin map[string]*Room) map[string]*Room {
+	clone := make(map[string]*Room, len(origin))
+	for x, y := range origin {
+		clone[x] = y
+	}
+	return clone
+}
+
 func RemoveValue(slice []interface{}, indexRemove int) []interface{} {
 	// Swap the element to remove with the last element
 	slice[indexRemove] = slice[len(slice)-1]
@@ -27,6 +60,7 @@ func RemoveValue(slice []interface{}, indexRemove int) []interface{} {
 	slice = slice[:len(slice)-1]
 	return slice
 }
+
 func GetValue(slice []interface{}, target interface{}) int {
 	for i, value := range slice {
 		if value == target {
@@ -35,6 +69,8 @@ func GetValue(slice []interface{}, target interface{}) int {
 	}
 	return -1 // Indicates that the value was not found
 }
+
+/*
 func appendToSlice(slice []interface{}, elements ...interface{}) ([]interface{}, error) {
 	// Use the ellipsis (...) to pass multiple elements as arguments to append
 	newSlice := append(slice, elements...)
@@ -46,3 +82,4 @@ func appendToSlice(slice []interface{}, elements ...interface{}) ([]interface{},
 
 	return newSlice, nil
 }
+*/

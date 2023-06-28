@@ -199,12 +199,3 @@ func (manager *Manager) RemoveClient(client *Client) {
 	}
 	manager.clientsMutex.Unlock()
 }
-
-// Creates a temporary deep copy of a client's rooms map attribute.
-func TempCopyRooms(origin map[string]*Room) map[string]*Room {
-	clone := make(map[string]*Room, len(origin))
-	for x, y := range origin {
-		clone[x] = y
-	}
-	return clone
-}

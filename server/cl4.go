@@ -2,33 +2,12 @@ package cloudlink
 
 import (
 	"fmt"
-
-	"github.com/bwmarrin/snowflake"
-	"github.com/google/uuid"
 )
 
 type UserObject struct {
-	Id       snowflake.ID `json:"id,omitempty"`
-	Username string       `json:"username,omitempty"`
-	Uuid     uuid.UUID    `json:"uuid,omitempty"`
-}
-
-// Generates a value for client identification.
-func (client *Client) GenerateUserObject() *UserObject {
-	client.RLock()
-	defer client.RUnlock()
-	if client.usernameset {
-		return &UserObject{
-			Id:       client.id,
-			Username: client.username,
-			Uuid:     client.uuid,
-		}
-	} else {
-		return &UserObject{
-			Id:   client.id,
-			Uuid: client.uuid,
-		}
-	}
+	Id       string `json:"id,omitempty"`
+	Username string `json:"username,omitempty"`
+	Uuid     string `json:"uuid,omitempty"`
 }
 
 func CL4ProtocolDetect(client *Client) {
@@ -51,6 +30,9 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 	// TODO: finish this
 	switch message.Cmd {
 	case "handshake":
+
+		client.RLock()
+		defer client.RUnlock()
 
 		// Don't re-broadcast this data if the handshake command was already used
 		if !client.handshake {
@@ -154,12 +136,25 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		}
 
 	case "pmsg":
-		break
+		// Require username to be set before usage
+		client.RLock()
+		defer client.RUnlock()
+		if !client.usernameset {
+			UnicastMessage(client, &PacketUPL{
+				Cmd:      "statuscode",
+				Code:     "E:111 | ID required",
+				CodeID:   111,
+				Val:      client.GenerateUserObject(),
+				Listener: message.Listener,
+			})
+			return
+		}
 
 	case "setid":
 		// Convert input to string
 		tmpname := fmt.Sprint(message.Val)
 
+		// Prevent changing username
 		client.RLock()
 		if client.usernameset {
 			UnicastMessage(client, &PacketUPL{
@@ -172,6 +167,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			client.RUnlock()
 			return
 		}
+		client.RUnlock()
 
 		// Update client attributes
 		client.Lock()
@@ -248,21 +244,80 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		}
 
 	case "pvar":
-		break
+		// Require username to be set before usage
+		client.RLock()
+		if !client.usernameset {
+			UnicastMessage(client, &PacketUPL{
+				Cmd:      "statuscode",
+				Code:     "E:111 | ID required",
+				CodeID:   111,
+				Val:      client.GenerateUserObject(),
+				Listener: message.Listener,
+			})
+			client.RUnlock()
+			return
+		}
+		client.RUnlock()
 
 	case "link":
-		break
+		// Require username to be set before usage
+		client.RLock()
+		if !client.usernameset {
+			UnicastMessage(client, &PacketUPL{
+				Cmd:      "statuscode",
+				Code:     "E:111 | ID required",
+				CodeID:   111,
+				Val:      client.GenerateUserObject(),
+				Listener: message.Listener,
+			})
+			client.RUnlock()
+			return
+		}
+		client.RUnlock()
 
 	case "unlink":
-		break
+		// Require username to be set before usage
+		client.RLock()
+		if !client.usernameset {
+			UnicastMessage(client, &PacketUPL{
+				Cmd:      "statuscode",
+				Code:     "E:111 | ID required",
+				CodeID:   111,
+				Val:      client.GenerateUserObject(),
+				Listener: message.Listener,
+			})
+			client.RUnlock()
+			return
+		}
+		client.RUnlock()
 
 	case "direct":
-		break
+		// Require username to be set before usage
+		client.RLock()
+		if !client.usernameset {
+			UnicastMessage(client, &PacketUPL{
+				Cmd:      "statuscode",
+				Code:     "E:111 | ID required",
+				CodeID:   111,
+				Val:      client.GenerateUserObject(),
+				Listener: message.Listener,
+			})
+			client.RUnlock()
+			return
+		}
+		client.RUnlock()
 
 	case "echo":
 		UnicastMessage(client, message)
 
 	default:
-		break
+		// Handle unknown commands
+		UnicastMessage(client, &PacketUPL{
+			Cmd:      "statuscode",
+			Code:     "E:109 | Invalid command",
+			CodeID:   109,
+			Val:      client.GenerateUserObject(),
+			Listener: message.Listener,
+		})
 	}
 }

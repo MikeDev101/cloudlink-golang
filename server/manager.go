@@ -81,10 +81,11 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 }
 
 // Dummy Managers function identically to a normal manager. However, they are used for selecting specific clients to multicast to.
-func DummyManager() *Manager {
+func DummyManager(name string) *Manager {
 	return &Manager{
 		clients: make(map[snowflake.ID]*Client),
 		rooms:   make(map[string]*Room),
+		name:    name,
 	}
 }
 

@@ -15,8 +15,7 @@ type Client struct {
 	manager         *Manager
 	id              snowflake.ID
 	uuid            uuid.UUID
-	username        string
-	usernameset     bool
+	username        interface{}
 	protocol        uint8 // 0 - Unset, 1 - CL4, 2 - Scratch
 	rooms           map[string]*Room
 	handshake       bool

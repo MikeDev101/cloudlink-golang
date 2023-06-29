@@ -18,7 +18,6 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 
 		// Update client attributes
 		client.username = message.Username
-		client.usernameset = true
 
 		// Creates room if it does not exist already
 		room := client.manager.CreateRoom(message.ProjectID)

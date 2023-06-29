@@ -29,7 +29,7 @@ func containsValue(slice []interface{}, value interface{}) bool {
 func (client *Client) GenerateUserObject() *UserObject {
 	client.RLock()
 	defer client.RUnlock()
-	if client.usernameset {
+	if client.username != nil {
 		return &UserObject{
 			Id:       fmt.Sprint(client.id),
 			Username: client.username,
@@ -41,6 +41,27 @@ func (client *Client) GenerateUserObject() *UserObject {
 			Uuid: fmt.Sprint(client.uuid),
 		}
 	}
+}
+
+func (room *Room) GenerateUserList() []*UserObject {
+	var output []*UserObject
+	for _, client := range room.clients {
+
+		// Read attributes
+		client.RLock()
+		usernameset := (client.username != nil)
+		protocol := client.protocol
+		client.RUnlock()
+
+		// Require a set username and a compatible protocol
+		if !usernameset || (protocol != 1) {
+			continue
+		}
+
+		// Add to userlist if valid
+		output = append(output, client.GenerateUserObject())
+	}
+	return output
 }
 
 // Creates a temporary deep copy of a client's rooms map attribute.

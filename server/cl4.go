@@ -1,9 +1,5 @@
 package cloudlink
 
-import (
-	"fmt"
-)
-
 type UserObject struct {
 	Id       string      `json:"id,omitempty"`
 	Username interface{} `json:"username,omitempty"`
@@ -70,7 +66,7 @@ func (room *Room) BroadcastGmsg(value interface{}) {
 	room.gmsgStateMutex.RUnlock()
 }
 
-func (room *Room) BroadcastGvar(name string, value interface{}) {
+func (room *Room) BroadcastGvar(name interface{}, value interface{}) {
 	// Update room gmsg state
 	room.gvarStateMutex.Lock()
 	room.gvarState[name] = value
@@ -215,24 +211,17 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		// Multiple rooms
 		case []any:
 			for _, room := range message.Rooms.([]any) {
-
-				// Convert input to string
-				tmproom := fmt.Sprint(room)
-
 				// Check if room is valid and is subscribed
-				if _, ok := client.rooms[tmproom]; ok {
-					client.rooms[tmproom].BroadcastGmsg(message.Val)
+				if _, ok := client.rooms[room]; ok {
+					client.rooms[room].BroadcastGmsg(message.Val)
 				}
 			}
 
 		// Single room
 		case any:
-			// Convert input to string
-			tmproom := fmt.Sprint(message.Rooms)
-
 			// Check if room is valid and is subscribed
-			if _, ok := client.rooms[tmproom]; ok {
-				client.rooms[tmproom].BroadcastGmsg(message.Val)
+			if _, ok := client.rooms[message.Rooms]; ok {
+				client.rooms[message.Rooms].BroadcastGmsg(message.Val)
 			}
 		}
 
@@ -310,7 +299,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		case nil:
 			// Use all subscribed rooms
 			for _, room := range client.rooms {
-				room.BroadcastGvar(fmt.Sprint(message.Name), message.Val)
+				room.BroadcastGvar(message.Name, message.Val)
 			}
 
 		// Multiple rooms
@@ -318,16 +307,16 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			// Use specified rooms
 			for _, room := range message.Rooms.([]any) {
 				// Check if room is valid and is subscribed
-				if _, ok := client.rooms[fmt.Sprint(room)]; ok {
-					client.rooms[fmt.Sprint(room)].BroadcastGvar(fmt.Sprint(message.Name), message.Val)
+				if _, ok := client.rooms[room]; ok {
+					client.rooms[room].BroadcastGvar(message.Name, message.Val)
 				}
 			}
 
 		// Single room
 		case any:
 			// Check if room is valid and is subscribed
-			if _, ok := client.rooms[fmt.Sprint(message.Rooms)]; ok {
-				client.rooms[fmt.Sprint(message.Rooms)].BroadcastGvar(fmt.Sprint(message.Name), message.Val)
+			if _, ok := client.rooms[message.Rooms]; ok {
+				client.rooms[message.Rooms].BroadcastGvar(message.Name, message.Val)
 			}
 		}
 

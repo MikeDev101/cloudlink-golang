@@ -65,8 +65,8 @@ func (room *Room) GenerateUserList() []*UserObject {
 }
 
 // Creates a temporary deep copy of a client's rooms map attribute.
-func TempCopyRooms(origin map[string]*Room) map[string]*Room {
-	clone := make(map[string]*Room, len(origin))
+func TempCopyRooms(origin map[interface{}]*Room) map[interface{}]*Room {
+	clone := make(map[interface{}]*Room, len(origin))
 	for x, y := range origin {
 		clone[x] = y
 	}

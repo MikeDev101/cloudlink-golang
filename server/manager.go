@@ -21,7 +21,7 @@ type Room struct {
 	gmsgStateMutex sync.RWMutex
 
 	// Globar variables (GVAR) states
-	gvarState      map[string]any
+	gvarState      map[interface{}]any
 	gvarStateMutex sync.RWMutex
 
 	// Friendly name for room
@@ -40,7 +40,7 @@ type Manager struct {
 	clientsMutex sync.RWMutex
 
 	// Rooms storage
-	rooms      map[string]*Room
+	rooms      map[any]*Room
 	roomsMutex sync.RWMutex
 
 	// Configuration settings
@@ -75,7 +75,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 		manager:    manager,
 		id:         client_id,
 		uuid:       client_uuid,
-		rooms:      make(map[string]*Room),
+		rooms:      make(map[any]*Room),
 		handshake:  false,
 	}
 }
@@ -84,7 +84,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 func DummyManager(name string) *Manager {
 	return &Manager{
 		clients: make(map[snowflake.ID]*Client),
-		rooms:   make(map[string]*Room),
+		rooms:   make(map[any]*Room),
 		name:    name,
 	}
 }
@@ -98,7 +98,7 @@ func New(name string) *Manager {
 	manager := &Manager{
 		name:            name,
 		clients:         make(map[snowflake.ID]*Client),
-		rooms:           make(map[string]*Room),
+		rooms:           make(map[any]*Room),
 		SnowflakeIDNode: node,
 	}
 
@@ -123,7 +123,7 @@ func (manager *Manager) CreateRoom(name string) *Room {
 			name:      name,
 			clients:   make(map[snowflake.ID]*Client, 1),
 			gmsgState: "",
-			gvarState: make(map[string]any),
+			gvarState: make(map[any]any),
 		}
 
 		manager.roomsMutex.Unlock()

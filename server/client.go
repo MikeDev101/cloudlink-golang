@@ -17,7 +17,7 @@ type Client struct {
 	uuid            uuid.UUID
 	username        interface{}
 	protocol        uint8 // 0 - Unset, 1 - CL4, 2 - Scratch
-	rooms           map[string]*Room
+	rooms           map[interface{}]*Room
 	handshake       bool
 
 	// Lock state for rooms

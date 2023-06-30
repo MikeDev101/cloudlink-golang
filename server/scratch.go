@@ -1,8 +1,6 @@
 package cloudlink
 
 import (
-	"fmt"
-
 	"github.com/gofiber/contrib/websocket"
 )
 
@@ -40,23 +38,30 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 		// Add the client to the room
 		room.SubscribeClient(client)
 
+		// Update variable states
+		room.gvarStateMutex.RLock()
+		for name, value := range room.gvarState {
+			MulticastMessage(room.clients, &Scratch{
+				Method: "set",
+				Value:  value,
+				Name:   name,
+			})
+		}
+		room.gvarStateMutex.RUnlock()
+
 	case "set":
 		for _, room := range client.rooms { // Should only ever have 1 entry
-
-			// Convert input to string
-			tmpname := fmt.Sprint(message.Name)
-
 			// Update room gvar state
 			room.gvarStateMutex.Lock()
-			room.gvarState[tmpname] = message.Value
+			room.gvarState[message.Name] = message.Value
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
 			room.gvarStateMutex.RLock()
 			MulticastMessage(room.clients, &Scratch{
 				Method: "set",
-				Value:  room.gvarState[tmpname],
-				Name:   tmpname,
+				Value:  room.gvarState[message.Name],
+				Name:   message.Name,
 			})
 			room.gvarStateMutex.RUnlock()
 		}
@@ -64,20 +69,17 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 	case "create":
 		for _, room := range client.rooms { // Should only ever have 1 entry
 
-			// Convert input to string
-			tmpname := fmt.Sprint(message.Name)
-
 			// Update room gvar state
 			room.gvarStateMutex.Lock()
-			room.gvarState[tmpname] = message.Value
+			room.gvarState[message.Name] = message.Value
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
 			room.gvarStateMutex.RLock()
 			MulticastMessage(room.clients, &Scratch{
 				Method: "create",
-				Value:  room.gvarState[tmpname],
-				Name:   tmpname,
+				Value:  room.gvarState[message.Name],
+				Name:   message.Name,
 			})
 			room.gvarStateMutex.RUnlock()
 		}
@@ -85,44 +87,37 @@ func ScratchMethodHandler(client *Client, message *Scratch) {
 	case "rename":
 		for _, room := range client.rooms { // Should only ever have 1 entry
 
-			// Convert inputs to string
-			tmpname := fmt.Sprint(message.Name)
-			tmpnewname := fmt.Sprint(message.NewName)
-
 			// Retrive old value
 			room.gvarStateMutex.RLock()
-			oldvalue := room.gvarState[tmpname]
+			oldvalue := room.gvarState[message.Name]
 			room.gvarStateMutex.RUnlock()
 
 			// Destroy old value and make a new value
 			room.gvarStateMutex.Lock()
-			delete(room.gvarState, tmpname)
-			room.gvarState[tmpnewname] = oldvalue
+			delete(room.gvarState, message.Name)
+			room.gvarState[message.NewName] = oldvalue
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
 			MulticastMessage(room.clients, &Scratch{
 				Method:  "rename",
-				NewName: tmpnewname,
-				Name:    tmpname,
+				NewName: message.NewName,
+				Name:    message.Name,
 			})
 		}
 
 	case "delete":
 		for _, room := range client.rooms { // Should only ever have 1 entry
 
-			// Convert input to string
-			tmpname := fmt.Sprint(message.Name)
-
 			// Destroy value
 			room.gvarStateMutex.Lock()
-			delete(room.gvarState, tmpname)
+			delete(room.gvarState, message.Name)
 			room.gvarStateMutex.Unlock()
 
 			// Broadcast the new state
 			MulticastMessage(room.clients, &Scratch{
 				Method: "delete",
-				Name:   tmpname,
+				Name:   message.Name,
 			})
 		}
 

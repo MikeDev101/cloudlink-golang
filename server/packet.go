@@ -23,6 +23,6 @@ type Scratch struct {
 	ProjectID interface{} `json:"project_id,omitempty"`
 	Username  string      `json:"user,omitempty"`
 	Value     interface{} `json:"value"`
-	Name      string      `json:"name,omitempty"`
-	NewName   string      `json:"new_name,omitempty"`
+	Name      interface{} `json:"name,omitempty"`
+	NewName   interface{} `json:"new_name,omitempty"`
 }

@@ -1,9 +1,14 @@
 package cloudlink
 
+import (
+	"github.com/bwmarrin/snowflake"
+	"github.com/google/uuid"
+)
+
 type UserObject struct {
-	Id       string      `json:"id,omitempty"`
-	Username interface{} `json:"username,omitempty"`
-	Uuid     string      `json:"uuid,omitempty"`
+	Id       snowflake.ID `json:"id,omitempty"`
+	Username interface{}  `json:"username,omitempty"`
+	Uuid     uuid.UUID    `json:"uuid,omitempty"`
 }
 
 func CL4ProtocolDetect(client *Client) {
@@ -26,15 +31,16 @@ func (room *Room) BroadcastUserlistEvent(event string, client *Client) {
 	dummy := DummyManager(room.name)
 
 	// Separate compatible clients
-	for _, _client := range room.clients {
+	for _, roomclient := range room.clients {
 
 		// Require a set username and a compatible protocol
-		if (_client.username == nil) || (_client.protocol != 1) {
+		tmpclient := roomclient.TempCopy()
+		if (tmpclient.username == nil) || (tmpclient.protocol != 1) {
 			continue
 		}
 
 		// Add client if passed
-		dummy.AddClient(_client)
+		dummy.AddClient(tmpclient)
 	}
 
 	// Broadcast state
@@ -80,10 +86,8 @@ func (room *Room) BroadcastGvar(name interface{}, value interface{}) {
 }
 
 func (client *Client) RequireIDBeingSet(message *PacketUPL) bool {
-	client.RLock()
-	usernameset := (client.username != nil)
-	client.RUnlock()
-	if !usernameset {
+	usernameunset := (client.TempCopy().username == nil)
+	if usernameunset {
 		UnicastMessage(client, &PacketUPL{
 			Cmd:      "statuscode",
 			Code:     "E:111 | ID required",
@@ -92,13 +96,11 @@ func (client *Client) RequireIDBeingSet(message *PacketUPL) bool {
 			Listener: message.Listener,
 		})
 	}
-	return usernameset
+	return usernameunset
 }
 
 func (client *Client) HandleIDSet(message *PacketUPL) bool {
-	client.RLock()
-	usernameset := (client.username != nil)
-	client.RUnlock()
+	usernameset := (client.TempCopy().username != nil)
 	if usernameset {
 		UnicastMessage(client, &PacketUPL{
 			Cmd:      "statuscode",
@@ -111,16 +113,14 @@ func (client *Client) HandleIDSet(message *PacketUPL) bool {
 	return usernameset
 }
 
-// CL4MethodHandler is a method that gets created when a CL-formatted message gets handled by MessageHandler.
+// CL4MethodHandler is a method that s created when a CL-formatted message gets handled by MessageHandler.
 func CL4MethodHandler(client *Client, message *PacketUPL) {
 	// TODO: finish this
 	switch message.Cmd {
 	case "handshake":
 
 		// Read attribute
-		client.RLock()
-		handshakeDone := client.handshake
-		client.RUnlock()
+		handshakeDone := (client.TempCopy().handshake)
 
 		// Don't re-broadcast this data if the handshake command was already used
 		if !handshakeDone {
@@ -158,8 +158,9 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 				Val: client.GenerateUserObject(),
 			})
 
-			// Send gmsg and ulist states
-			for _, room := range client.rooms {
+			// Send gmsg, ulist, and gvar states
+			rooms := client.TempCopy().rooms
+			for _, room := range rooms {
 				UnicastMessage(client, &PacketUPL{
 					Cmd:   "gmsg",
 					Val:   room.gmsgState,
@@ -171,6 +172,16 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 					Val:   room.GenerateUserList(),
 					Rooms: room.name,
 				})
+				room.gvarStateMutex.RLock()
+				for name, value := range room.gvarState {
+					UnicastMessage(client, &PacketUPL{
+						Cmd:   "gvar",
+						Name:  name,
+						Val:   value,
+						Rooms: room.name,
+					})
+				}
+				room.gvarStateMutex.RUnlock()
 			}
 		}
 
@@ -200,42 +211,35 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		// Value not specified in message
 		case nil:
 			// Use all subscribed rooms
-			for _, room := range client.rooms {
+			rooms := client.TempCopy().rooms
+			for _, room := range rooms {
 				room.BroadcastGmsg(message.Val)
 			}
 
 		// Multiple rooms
 		case []any:
 			for _, room := range message.Rooms.([]any) {
+				rooms := client.TempCopy().rooms
+
 				// Check if room is valid and is subscribed
-				if _, ok := client.rooms[room]; ok {
-					client.rooms[room].BroadcastGmsg(message.Val)
+				if _, ok := rooms[room]; ok {
+					rooms[room].BroadcastGmsg(message.Val)
 				}
 			}
 
 		// Single room
 		case any:
 			// Check if room is valid and is subscribed
-			if _, ok := client.rooms[message.Rooms]; ok {
-				client.rooms[message.Rooms].BroadcastGmsg(message.Val)
+			rooms := client.TempCopy().rooms
+			if _, ok := rooms[message.Rooms]; ok {
+				rooms[message.Rooms].BroadcastGmsg(message.Val)
 			}
 		}
 		return
 
 	case "pmsg":
 		// Require username to be set before usage
-		client.RLock()
-		usernameset := (client.username != nil)
-		client.RUnlock()
-
-		if !usernameset {
-			UnicastMessage(client, &PacketUPL{
-				Cmd:      "statuscode",
-				Code:     "E:111 | ID required",
-				CodeID:   111,
-				Val:      client.GenerateUserObject(),
-				Listener: message.Listener,
-			})
+		if !client.RequireIDBeingSet(message) {
 			return
 		}
 
@@ -269,7 +273,8 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		client.Unlock()
 
 		// Use default room
-		for _, room := range client.rooms {
+		rooms := client.TempCopy().rooms
+		for _, room := range rooms {
 			room.BroadcastUserlistEvent("add", client)
 			UnicastMessage(client, &PacketUPL{
 				Cmd:   "ulist",
@@ -295,7 +300,8 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		// Value not specified in message
 		case nil:
 			// Use all subscribed rooms
-			for _, room := range client.rooms {
+			rooms := client.TempCopy().rooms
+			for _, room := range rooms {
 				room.BroadcastGvar(message.Name, message.Val)
 			}
 
@@ -303,17 +309,20 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		case []any:
 			// Use specified rooms
 			for _, room := range message.Rooms.([]any) {
+				rooms := client.TempCopy().rooms
+
 				// Check if room is valid and is subscribed
-				if _, ok := client.rooms[room]; ok {
-					client.rooms[room].BroadcastGvar(message.Name, message.Val)
+				if _, ok := rooms[room]; ok {
+					rooms[room].BroadcastGvar(message.Name, message.Val)
 				}
 			}
 
 		// Single room
 		case any:
 			// Check if room is valid and is subscribed
-			if _, ok := client.rooms[message.Rooms]; ok {
-				client.rooms[message.Rooms].BroadcastGvar(message.Name, message.Val)
+			rooms := client.TempCopy().rooms
+			if _, ok := rooms[message.Rooms]; ok {
+				rooms[message.Rooms].BroadcastGvar(message.Name, message.Val)
 			}
 		}
 
@@ -417,10 +426,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 
 		case nil:
 			// Unsubscribe all rooms and rejoin default
-			client.RLock()
-			rooms := TempCopyRooms(client.rooms)
-			client.RUnlock()
-
+			rooms := client.TempCopy().rooms
 			for _, room := range rooms {
 				room.UnsubscribeClient(client)
 				// Destroy room if empty, but don't destroy default room
@@ -458,9 +464,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			}
 
 			// Get currently subscribed rooms
-			client.RLock()
-			rooms := TempCopyRooms(client.rooms)
-			client.RUnlock()
+			rooms := client.TempCopy().rooms
 
 			// Validate room and verify that it was joined
 			for _, _room := range message.Val.([]interface{}) {
@@ -495,9 +499,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			}
 
 			// Get currently subscribed rooms
-			client.RLock()
-			rooms := TempCopyRooms(client.rooms)
-			client.RUnlock()
+			rooms := client.TempCopy().rooms
 
 			// Validate if room is joined and remove client
 			if _, ok := rooms[message.Val]; ok {

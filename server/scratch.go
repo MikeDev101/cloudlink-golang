@@ -1,6 +1,10 @@
 package cloudlink
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/gofiber/contrib/websocket"
+)
 
 func ScratchProtocolDetect(client *Client) {
 	if client.protocol == 0 {
@@ -15,6 +19,17 @@ func ScratchProtocolDetect(client *Client) {
 func ScratchMethodHandler(client *Client, message *Scratch) {
 	switch message.Method {
 	case "handshake":
+
+		// Validate datatype of project ID
+		switch message.ProjectID.(type) {
+		case string:
+		case bool:
+		case int64:
+		case float64:
+		default:
+			client.CloseWithMessage(websocket.CloseUnsupportedData, "Invalid Project ID datatype")
+			return
+		}
 
 		// Update client attributes
 		client.username = message.Username

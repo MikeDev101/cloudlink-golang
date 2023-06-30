@@ -25,7 +25,7 @@ type Room struct {
 	gvarStateMutex sync.RWMutex
 
 	// Friendly name for room
-	name string
+	name interface{}
 
 	// Locks states before subscribing/unsubscribing clients
 	sync.RWMutex
@@ -33,7 +33,7 @@ type Room struct {
 
 type Manager struct {
 	// Friendly name for manager
-	name string
+	name interface{}
 
 	// Registered client sessions
 	clients      map[snowflake.ID]*Client
@@ -81,7 +81,7 @@ func NewClient(conn *websocket.Conn, manager *Manager) *Client {
 }
 
 // Dummy Managers function identically to a normal manager. However, they are used for selecting specific clients to multicast to.
-func DummyManager(name string) *Manager {
+func DummyManager(name interface{}) *Manager {
 	return &Manager{
 		clients: make(map[snowflake.ID]*Client),
 		rooms:   make(map[any]*Room),
@@ -105,7 +105,7 @@ func New(name string) *Manager {
 	return manager
 }
 
-func (manager *Manager) CreateRoom(name string) *Room {
+func (manager *Manager) CreateRoom(name interface{}) *Room {
 	manager.roomsMutex.RLock()
 
 	// Access rooms map
@@ -146,6 +146,15 @@ func (room *Room) SubscribeClient(client *Client) {
 	client.rooms[room.name] = room
 
 	client.Unlock()
+
+	// Handle CL room states
+	client.RLock()
+	protocol := client.protocol
+	usernameset := (client.username != nil)
+	client.RUnlock()
+	if protocol == 1 && usernameset {
+		room.BroadcastUserlistEvent("add", client)
+	}
 }
 
 func (room *Room) UnsubscribeClient(client *Client) {
@@ -161,9 +170,18 @@ func (room *Room) UnsubscribeClient(client *Client) {
 	delete(client.rooms, room.name)
 
 	client.Unlock()
+
+	// Handle CL room states
+	client.RLock()
+	protocol := client.protocol
+	usernameset := (client.username != nil)
+	client.RUnlock()
+	if protocol == 1 && usernameset {
+		room.BroadcastUserlistEvent("remove", client)
+	}
 }
 
-func (manager *Manager) DeleteRoom(name string) {
+func (manager *Manager) DeleteRoom(name interface{}) {
 	manager.roomsMutex.Lock()
 
 	log.Printf("[%s] Destroying room %s", manager.name, name)
@@ -193,8 +211,8 @@ func (manager *Manager) RemoveClient(client *Client) {
 	for _, room := range TempCopyRooms(client.rooms) {
 		room.UnsubscribeClient(client)
 
-		// Destroy room if empty
-		if len(room.clients) == 0 {
+		// Destroy room if empty, but don't destroy default room
+		if len(room.clients) == 0 && (room.name != "default") {
 			manager.DeleteRoom(room.name)
 		}
 	}

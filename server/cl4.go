@@ -13,7 +13,7 @@ func CL4ProtocolDetect(client *Client) {
 		client.protocol = 1 // CL4
 		client.Unlock()
 
-		// Creates room if it does not exist already
+		// Creates default room - Should only be generated once per server restart
 		defaultroom := client.manager.CreateRoom("default")
 
 		// Add the client to the room
@@ -21,30 +21,26 @@ func CL4ProtocolDetect(client *Client) {
 	}
 }
 
-func (room *Room) BroadcastUserlistEvent(event string, value interface{}, exclude *Client) {
+func (room *Room) BroadcastUserlistEvent(event string, client *Client) {
 	// Create a dummy manager for selecting clients
 	dummy := DummyManager(room.name)
 
 	// Separate compatible clients
-	for _, client := range room.clients {
-		// Exclude
-		if (exclude != nil) && (exclude.id == client.id) {
-			continue
-		}
+	for _, _client := range room.clients {
 
 		// Require a set username and a compatible protocol
-		if (client.username == nil) || (client.protocol != 1) {
+		if (_client.username == nil) || (_client.protocol != 1) {
 			continue
 		}
 
 		// Add client if passed
-		dummy.AddClient(client)
+		dummy.AddClient(_client)
 	}
 
 	// Broadcast state
 	MulticastMessage(dummy.clients, &PacketUPL{
 		Cmd:   "ulist",
-		Val:   value,
+		Val:   client.GenerateUserObject(),
 		Mode:  event,
 		Rooms: room.name,
 	})
@@ -224,6 +220,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 				client.rooms[message.Rooms].BroadcastGmsg(message.Val)
 			}
 		}
+		return
 
 	case "pmsg":
 		// Require username to be set before usage
@@ -273,7 +270,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 
 		// Use default room
 		for _, room := range client.rooms {
-			room.BroadcastUserlistEvent("add", client.GenerateUserObject(), client)
+			room.BroadcastUserlistEvent("add", client)
 			UnicastMessage(client, &PacketUPL{
 				Cmd:   "ulist",
 				Mode:  "set",
@@ -332,11 +329,193 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 			return
 		}
 
+		// Detect if single or multiple rooms
+		switch message.Val.(type) {
+
+		case nil:
+			UnicastMessage(client, &PacketUPL{
+				Cmd:     "statuscode",
+				Code:    "E:101 | Syntax",
+				CodeID:  101,
+				Details: "Message missing required val key",
+			})
+			return
+
+		// Multiple rooms
+		case []interface{}:
+			// Validate datatypes of array
+			for _, elem := range message.Val.([]interface{}) {
+				switch elem.(type) {
+				case string:
+				case int64:
+				case float64:
+				case bool:
+				default:
+					// Send status code
+					UnicastMessage(client, &PacketUPL{
+						Cmd:      "statuscode",
+						Code:     "E:102 | Datatype",
+						CodeID:   102,
+						Details:  "Multiple rooms value (val) must be an array of strings, bools, floats, or ints.",
+						Listener: message.Listener,
+					})
+					return
+				}
+			}
+			// Subscribe to all rooms
+			for _, name := range message.Val.([]interface{}) {
+
+				// Create room if it doesn't exist
+				room := client.manager.CreateRoom(name)
+
+				// Add the client to the room
+				room.SubscribeClient(client)
+			}
+
+		// Single room
+		case interface{}:
+			// Validate datatype
+			switch message.Val.(type) {
+			case string:
+			case int64:
+			case float64:
+			case bool:
+			default:
+				// Send status code
+				UnicastMessage(client, &PacketUPL{
+					Cmd:      "statuscode",
+					Code:     "E:102 | Datatype",
+					CodeID:   102,
+					Details:  "Single room value (val) must be a string, boolean, float, int.",
+					Listener: message.Listener,
+				})
+				return
+			}
+
+			// Subscribe to single room
+			// Create room if it doesn't exist
+			room := client.manager.CreateRoom(message.Val)
+
+			// Add the client to the room
+			room.SubscribeClient(client)
+		}
+
+		// Send status code
+		UnicastMessage(client, &PacketUPL{
+			Cmd:    "statuscode",
+			Code:   "I:100 | OK",
+			CodeID: 100,
+		})
+
 	case "unlink":
 		// Require username to be set before usage
 		if !client.RequireIDBeingSet(message) {
 			return
 		}
+		// Detect if single or multiple rooms
+		switch message.Val.(type) {
+
+		case nil:
+			// Unsubscribe all rooms and rejoin default
+			client.RLock()
+			rooms := TempCopyRooms(client.rooms)
+			client.RUnlock()
+
+			for _, room := range rooms {
+				room.UnsubscribeClient(client)
+				// Destroy room if empty, but don't destroy default room
+				if len(room.clients) == 0 && (room.name != "default") {
+					client.manager.DeleteRoom(room.name)
+				}
+			}
+
+			// Get default room
+			defaultroom := client.manager.CreateRoom("default")
+
+			// Add the client to the room
+			defaultroom.SubscribeClient(client)
+
+		// Multiple rooms
+		case []interface{}:
+			// Validate datatypes of array
+			for _, elem := range message.Val.([]interface{}) {
+				switch elem.(type) {
+				case string:
+				case bool:
+				case int64:
+				case float64:
+				default:
+					// Send status code
+					UnicastMessage(client, &PacketUPL{
+						Cmd:      "statuscode",
+						Code:     "E:102 | Datatype",
+						CodeID:   102,
+						Details:  "Multiple rooms value (val) must be an array of strings",
+						Listener: message.Listener,
+					})
+					return
+				}
+			}
+
+			// Get currently subscribed rooms
+			client.RLock()
+			rooms := TempCopyRooms(client.rooms)
+			client.RUnlock()
+
+			// Validate room and verify that it was joined
+			for _, _room := range message.Val.([]interface{}) {
+				if _, ok := rooms[_room]; ok {
+					room := rooms[_room]
+					room.UnsubscribeClient(client)
+					// Destroy room if empty, but don't destroy default room
+					if len(room.clients) == 0 && (room.name != "default") {
+						client.manager.DeleteRoom(room.name)
+					}
+				}
+			}
+
+		// Single room
+		case interface{}:
+			// Validate datatype
+			switch message.Val.(type) {
+			case string:
+			case bool:
+			case int64:
+			case float64:
+			default:
+				// Send status code
+				UnicastMessage(client, &PacketUPL{
+					Cmd:      "statuscode",
+					Code:     "E:102 | Datatype",
+					CodeID:   102,
+					Details:  "Single room value (val) must be a string",
+					Listener: message.Listener,
+				})
+				return
+			}
+
+			// Get currently subscribed rooms
+			client.RLock()
+			rooms := TempCopyRooms(client.rooms)
+			client.RUnlock()
+
+			// Validate if room is joined and remove client
+			if _, ok := rooms[message.Val]; ok {
+				room := rooms[message.Val]
+				room.UnsubscribeClient(client)
+				// Destroy room if empty, but don't destroy default room
+				if len(room.clients) == 0 && (room.name != "default") {
+					client.manager.DeleteRoom(room.name)
+				}
+			}
+		}
+
+		// Send status code
+		UnicastMessage(client, &PacketUPL{
+			Cmd:    "statuscode",
+			Code:   "I:100 | OK",
+			CodeID: 100,
+		})
 
 	case "direct":
 		// Require username to be set before usage

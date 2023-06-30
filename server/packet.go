@@ -20,7 +20,7 @@ type PacketUPL struct {
 // Values that are not specific to one type are represented with interface{}.
 type Scratch struct {
 	Method    string      `json:"method"`
-	ProjectID string      `json:"project_id,omitempty"`
+	ProjectID interface{} `json:"project_id,omitempty"`
 	Username  string      `json:"user,omitempty"`
 	Value     interface{} `json:"value"`
 	Name      string      `json:"name,omitempty"`

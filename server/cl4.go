@@ -26,15 +26,20 @@ func CL4ProtocolDetect(client *Client) {
 	}
 }
 
-func (room *Room) BroadcastUserlistEvent(event string, client *Client) {
+func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude bool) {
 	// Create a dummy manager for selecting clients
 	dummy := DummyManager(room.name)
 
 	// Separate compatible clients
 	for _, roomclient := range room.clients {
+		tmpclient := roomclient.TempCopy()
+
+		// Exclude handler
+		if exclude && (tmpclient.id == (client.TempCopy().id)) {
+			continue
+		}
 
 		// Require a set username and a compatible protocol
-		tmpclient := roomclient.TempCopy()
 		if (tmpclient.username == nil) || (tmpclient.protocol != 1) {
 			continue
 		}
@@ -92,7 +97,6 @@ func (client *Client) RequireIDBeingSet(message *PacketUPL) bool {
 			Cmd:      "statuscode",
 			Code:     "E:111 | ID required",
 			CodeID:   111,
-			Val:      client.GenerateUserObject(),
 			Listener: message.Listener,
 		})
 	}
@@ -275,7 +279,7 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 		// Use default room
 		rooms := client.TempCopy().rooms
 		for _, room := range rooms {
-			room.BroadcastUserlistEvent("add", client)
+			room.BroadcastUserlistEvent("add", client, true)
 			UnicastMessage(client, &PacketUPL{
 				Cmd:   "ulist",
 				Mode:  "set",

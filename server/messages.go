@@ -17,7 +17,7 @@ func JSONDump(message any) []byte {
 func MulticastMessage(clients map[snowflake.ID]*Client, message any) {
 	for _, client := range clients {
 		// Spawn goroutines to multicast the payload
-		go UnicastMessage(client, message)
+		UnicastMessage(client, message)
 	}
 }
 

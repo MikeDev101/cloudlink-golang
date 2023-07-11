@@ -38,17 +38,19 @@ func (client *Client) TempCopy() *Client {
 	rooms := TempCopyRooms(client.rooms)
 	id := client.id
 	uuid := client.uuid
+	handshake := client.handshake
 
 	// Free client read lock
 	client.RUnlock()
 
 	// Return copied client
 	return &Client{
-		username: username,
-		id:       id,
-		rooms:    rooms,
-		protocol: protocol,
-		uuid:     uuid,
+		username:  username,
+		handshake: handshake,
+		id:        id,
+		rooms:     rooms,
+		protocol:  protocol,
+		uuid:      uuid,
 	}
 }
 

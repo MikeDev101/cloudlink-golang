@@ -1,14 +1,13 @@
 package cloudlink
 
 import (
-	"github.com/bwmarrin/snowflake"
-	"github.com/google/uuid"
+	"log"
 )
 
 type UserObject struct {
-	Id       snowflake.ID `json:"id,omitempty"`
-	Username interface{}  `json:"username,omitempty"`
-	Uuid     uuid.UUID    `json:"uuid,omitempty"`
+	Id       string      `json:"id,omitempty"`
+	Username interface{} `json:"username,omitempty"`
+	Uuid     string      `json:"uuid,omitempty"`
 }
 
 func CL4ProtocolDetect(client *Client) {
@@ -35,7 +34,8 @@ func (room *Room) BroadcastUserlistEvent(event string, client *Client, exclude b
 		tmpclient := roomclient.TempCopy()
 
 		// Exclude handler
-		if exclude && (tmpclient.id == (client.TempCopy().id)) {
+		excludeclientid := client.TempCopy().id
+		if exclude && (tmpclient.id == excludeclientid) {
 			continue
 		}
 
@@ -239,12 +239,25 @@ func CL4MethodHandler(client *Client, message *PacketUPL) {
 				rooms[message.Rooms].BroadcastGmsg(message.Val)
 			}
 		}
-		return
 
 	case "pmsg":
 		// Require username to be set before usage
-		if !client.RequireIDBeingSet(message) {
+		if client.RequireIDBeingSet(message) {
 			return
+		}
+
+		rooms := TempCopyRooms(client.rooms)
+		log.Printf("Searching for ID %s", message.ID)
+		for _, room := range rooms {
+			switch message.ID.(type) {
+			case []interface{}:
+				for _, multiquery := range message.ID.([]interface{}) {
+					log.Printf("Room: %s - Multi query entry: %s, Result: %s", room.name, multiquery, room.FindClient(multiquery))
+				}
+
+			default:
+				log.Printf("Room: %s - Result: %s", room.name, room.FindClient(message.ID))
+			}
 		}
 
 	case "setid":

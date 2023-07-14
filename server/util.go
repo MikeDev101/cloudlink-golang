@@ -3,8 +3,9 @@ package cloudlink
 import (
 	// "errors"
 
+	"fmt"
+
 	"github.com/bwmarrin/snowflake"
-	"github.com/google/uuid"
 )
 
 /*
@@ -55,8 +56,8 @@ func (client *Client) TempCopy() *Client {
 }
 
 // Gathers a map of all Snowflake IDs representing Clients in a Room or Manager.
-func GatherSnowflakeIDs(clientstore interface{}) map[snowflake.ID]*Client {
-	allids := make(map[snowflake.ID]*Client)
+func GatherSnowflakeIDs(clientstore interface{}) map[interface{}]*Client {
+	allids := make(map[interface{}]*Client)
 	var readmode uint8
 	var tmproom *Room
 	var tmpmgr *Manager
@@ -93,7 +94,7 @@ func GatherSnowflakeIDs(clientstore interface{}) map[snowflake.ID]*Client {
 			continue
 		}
 
-		allids[client.id] = client
+		allids[fmt.Sprint(client.id)] = client // Convert to strings for hash table searching
 	}
 
 	// Free lock
@@ -104,13 +105,13 @@ func GatherSnowflakeIDs(clientstore interface{}) map[snowflake.ID]*Client {
 		tmpmgr.RUnlock()
 	}
 
-	// Return collected Snowflake IDs
+	// Return collected Snowflake IDs as strings
 	return allids
 }
 
 // Gathers a map of all UUIDs representing Clients in a Room or Manager.
-func GatherUUIDs(clientstore interface{}) map[uuid.UUID]*Client {
-	alluuids := make(map[uuid.UUID]*Client)
+func GatherUUIDs(clientstore interface{}) map[interface{}]*Client {
+	alluuids := make(map[interface{}]*Client)
 	var readmode uint8
 	var tmproom *Room
 	var tmpmgr *Manager
@@ -147,7 +148,7 @@ func GatherUUIDs(clientstore interface{}) map[uuid.UUID]*Client {
 			continue
 		}
 
-		alluuids[client.uuid] = client
+		alluuids[fmt.Sprint(client.uuid)] = client // Convert to strings for hash table searching
 	}
 
 	// Free lock
@@ -158,13 +159,13 @@ func GatherUUIDs(clientstore interface{}) map[uuid.UUID]*Client {
 		tmpmgr.RUnlock()
 	}
 
-	// Return collected UUIDs
+	// Return collected UUIDs as strings
 	return alluuids
 }
 
 // Gathers a map of all UserObjects representing Clients in a Room or Manager.
-func GatherUserObjects(clientstore interface{}) map[*UserObject]*Client {
-	alluserobjects := make(map[*UserObject]*Client)
+func GatherUserObjects(clientstore interface{}) map[interface{}]*Client {
+	alluserobjects := make(map[interface{}]*Client)
 	var readmode uint8
 	var tmproom *Room
 	var tmpmgr *Manager
@@ -201,7 +202,7 @@ func GatherUserObjects(clientstore interface{}) map[*UserObject]*Client {
 			continue
 		}
 
-		alluserobjects[client.GenerateUserObject()] = client
+		alluserobjects[string(JSONDump(client.GenerateUserObject()))] = client
 	}
 
 	// Free lock
@@ -271,40 +272,39 @@ func GatherUsernames(clientstore interface{}) map[interface{}][]*Client {
 }
 
 // Takes a UUID, Snowflake ID, Username, or UserObject query and returns either a single Client (UUID, Snowflake, UserObject) or multiple Clients (username).
-func (room *Room) FindClient(query any) interface{} {
-	// Interface handling
+func (room *Room) FindClient(query interface{}) interface{} {
+
+	// TODO: fix this fugly slow mess
 	switch query.(type) {
 
-	// Snowflake search
-	case snowflake.ID:
-		snowflakequery := query
-		ids := GatherSnowflakeIDs(room)
-		if _, ok := ids[snowflakequery.(snowflake.ID)]; ok {
-			return ids[snowflakequery.(snowflake.ID)] // Returns *Client
-		}
-
-	// UUID search
-	case uuid.UUID:
-		uuidquery := query
-		uuids := GatherUUIDs(room)
-		if _, ok := uuids[uuidquery.(uuid.UUID)]; ok {
-			return uuids[uuidquery.(uuid.UUID)] // Returns *Client
-		}
-
-	// User object search
-	case *UserObject:
-		userobjectquery := query
+	// Handle hashtable-converted JSON types
+	case map[string]interface{}:
+		// Attempt User object search
 		userobjects := GatherUserObjects(room)
-		if _, ok := userobjects[userobjectquery.(*UserObject)]; ok {
-			return userobjects[userobjectquery.(*UserObject)] // Returns *Client
+		querystring := string(JSONDump(query))
+		if _, ok := userobjects[querystring]; ok {
+			return userobjects[querystring] // Returns *Client
 		}
 
-	// Username search
-	default:
-		usernames := GatherUsernames(room)
-		if _, ok := usernames[query]; ok {
-			return usernames[query] // Returns array of *Client
+	// These two are expected to be strings
+	case string:
+		// Attempt Snowflake ID search
+		snowflakeids := GatherSnowflakeIDs(room)
+		if _, ok := snowflakeids[query]; ok {
+			return snowflakeids[query] // Returns *Client
 		}
+
+		// Attempt UUID search
+		uuids := GatherUUIDs(room)
+		if _, ok := uuids[query]; ok {
+			return uuids[query] // Returns *Client
+		}
+	}
+	// BUG: Attempting to search for an entry of []interface{} type crashes this
+	// Attempt username search
+	usernames := GatherUsernames(room)
+	if _, ok := usernames[query]; ok {
+		return usernames[query] // Returns array of *Client
 	}
 
 	// Unsupported type
@@ -317,14 +317,14 @@ func (client *Client) GenerateUserObject() *UserObject {
 	defer client.RUnlock()
 	if client.username != nil {
 		return &UserObject{
-			Id:       client.id,
+			Id:       fmt.Sprint(client.id),
 			Username: client.username,
-			Uuid:     client.uuid,
+			Uuid:     fmt.Sprint(client.uuid),
 		}
 	} else {
 		return &UserObject{
-			Id:   client.id,
-			Uuid: client.uuid,
+			Id:   fmt.Sprint(client.id),
+			Uuid: fmt.Sprint(client.uuid),
 		}
 	}
 }
